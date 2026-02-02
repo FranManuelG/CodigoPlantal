@@ -96,26 +96,26 @@ class PlantBot:
         help_text = (
             '🌿 *Comandos disponibles:*\n\n'
             '*Gestión de Plantas:*\n'
-            '/agregar - Agregar una nueva planta\n'
-            '/plantas - Ver todas tus plantas\n'
-            '/eliminar - Eliminar una planta\n\n'
+            '/agregar \\- Agregar una nueva planta\n'
+            '/plantas \\- Ver todas tus plantas\n'
+            '/eliminar \\- Eliminar una planta\n\n'
             '*Riego:*\n'
-            '/regar - Registrar que regaste una planta\n'
-            '/historial - Ver historial de riegos\n'
-            '/pendientes - Ver plantas que necesitan riego\n\n'
+            '/regar \\- Registrar que regaste una planta\n'
+            '/historial \\- Ver historial de riegos\n'
+            '/pendientes \\- Ver plantas que necesitan riego\n\n'
             '*Fotos:*\n'
-            '/foto - Agregar foto a una planta\n'
-            '/fotos - Ver fotos de tus plantas\n\n'
+            '/foto \\- Agregar foto a una planta\n'
+            '/fotos \\- Ver fotos de tus plantas\n\n'
             '*Grupos:*\n'
-            '/crear_grupo - Crear grupo/ubicación\n'
-            '/grupos - Ver grupos y plantas\n\n'
+            '/crear\\_grupo \\- Crear grupo/ubicación\n'
+            '/grupos \\- Ver grupos y plantas\n\n'
             '*Otros:*\n'
-            '/estadisticas - Ver estadísticas de riego\n'
-            '/notificaciones - Activar/desactivar recordatorios\n'
-            '/ayuda - Mostrar este mensaje\n'
-            '/cancelar - Cancelar operación actual'
+            '/estadisticas \\- Ver estadísticas de riego\n'
+            '/notificaciones \\- Activar/desactivar recordatorios\n'
+            '/ayuda \\- Mostrar este mensaje\n'
+            '/cancelar \\- Cancelar operación actual'
         )
-        await update.message.reply_text(help_text, parse_mode='Markdown')
+        await update.message.reply_text(help_text, parse_mode='MarkdownV2')
     
     async def add_plant_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
