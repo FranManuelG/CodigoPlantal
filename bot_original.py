@@ -4,15 +4,13 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import asyncio
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     ConversationHandler,
     ContextTypes,
-    CallbackQueryHandler,
     filters,
 )
 from database import Database
@@ -23,7 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PLANT_NAME, PLANT_DAYS, SELECTING_PLANT, PHOTO_PLANT, GROUP_NAME, GROUP_ASSIGN = range(6)
+PLANT_NAME, PLANT_DAYS, SELECTING_PLANT = range(3)
 
 class PlantBot:
     def __init__(self, token: str):
@@ -31,10 +29,9 @@ class PlantBot:
         self.db = Database()
         self.application = Application.builder().token(token).build()
         self._setup_handlers()
-        self.notification_task = None
     
     def _setup_handlers(self):
-        add_plant_handler = ConversationHandler(
+        conv_handler = ConversationHandler(
             entry_points=[CommandHandler('agregar', self.add_plant_start)],
             states={
                 PLANT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_name)],
@@ -51,38 +48,14 @@ class PlantBot:
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
         
-        photo_handler = ConversationHandler(
-            entry_points=[CommandHandler('foto', self.add_photo_start)],
-            states={
-                PHOTO_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_photo_select_plant)],
-            },
-            fallbacks=[CommandHandler('cancelar', self.cancel)],
-        )
-        
-        group_handler = ConversationHandler(
-            entry_points=[CommandHandler('crear_grupo', self.create_group_start)],
-            states={
-                GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.create_group_name)],
-            },
-            fallbacks=[CommandHandler('cancelar', self.cancel)],
-        )
-        
         self.application.add_handler(CommandHandler('start', self.start))
         self.application.add_handler(CommandHandler('ayuda', self.help_command))
-        self.application.add_handler(add_plant_handler)
+        self.application.add_handler(conv_handler)
         self.application.add_handler(regar_handler)
-        self.application.add_handler(photo_handler)
-        self.application.add_handler(group_handler)
         self.application.add_handler(CommandHandler('plantas', self.list_plants))
         self.application.add_handler(CommandHandler('historial', self.watering_history))
         self.application.add_handler(CommandHandler('eliminar', self.delete_plant))
         self.application.add_handler(CommandHandler('pendientes', self.pending_plants))
-        self.application.add_handler(CommandHandler('fotos', self.view_photos))
-        self.application.add_handler(CommandHandler('grupos', self.list_groups))
-        self.application.add_handler(CommandHandler('estadisticas', self.show_stats))
-        self.application.add_handler(CommandHandler('notificaciones', self.toggle_notifications))
-        self.application.add_handler(MessageHandler(filters.PHOTO, self.receive_photo))
-        self.application.add_handler(CallbackQueryHandler(self.button_callback))
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -95,23 +68,12 @@ class PlantBot:
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text = (
             '🌿 *Comandos disponibles:*\n\n'
-            '*Gestión de Plantas:*\n'
             '/agregar - Agregar una nueva planta\n'
             '/plantas - Ver todas tus plantas\n'
-            '/eliminar - Eliminar una planta\n\n'
-            '*Riego:*\n'
             '/regar - Registrar que regaste una planta\n'
             '/historial - Ver historial de riegos\n'
-            '/pendientes - Ver plantas que necesitan riego\n\n'
-            '*Fotos:*\n'
-            '/foto - Agregar foto a una planta\n'
-            '/fotos - Ver fotos de tus plantas\n\n'
-            '*Grupos:*\n'
-            '/crear_grupo - Crear grupo/ubicación\n'
-            '/grupos - Ver grupos y plantas\n\n'
-            '*Otros:*\n'
-            '/estadisticas - Ver estadísticas de riego\n'
-            '/notificaciones - Activar/desactivar recordatorios\n'
+            '/pendientes - Ver plantas que necesitan riego\n'
+            '/eliminar - Eliminar una planta\n'
             '/ayuda - Mostrar este mensaje\n'
             '/cancelar - Cancelar operación actual'
         )
@@ -147,7 +109,7 @@ class PlantBot:
             await update.message.reply_text(
                 f'✅ ¡Planta "{plant_name}" agregada!\n'
                 f'Frecuencia de riego: cada {days} día(s)\n\n'
-                'Usa /foto para agregar una foto de tu planta.'
+                'Usa /plantas para ver todas tus plantas.'
             )
             
             context.user_data.clear()
@@ -304,205 +266,6 @@ class PlantBot:
         message += '\nUsa /regar para registrar un riego.'
         await update.message.reply_text(message, parse_mode='Markdown')
     
-    async def add_photo_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        plants = self.db.get_user_plants(user_id)
-        
-        if not plants:
-            await update.message.reply_text(
-                '🌵 No tienes plantas registradas.\n'
-                'Usa /agregar para agregar una planta primero.'
-            )
-            return ConversationHandler.END
-        
-        keyboard = [[plant[1]] for plant in plants]
-        keyboard.append(['Cancelar'])
-        
-        await update.message.reply_text(
-            '📸 ¿A qué planta quieres agregar una foto?',
-            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
-        )
-        return PHOTO_PLANT
-    
-    async def add_photo_select_plant(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.message.text == 'Cancelar':
-            await update.message.reply_text(
-                'Operación cancelada.',
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return ConversationHandler.END
-        
-        user_id = update.effective_user.id
-        plant_name = update.message.text
-        
-        plant = self.db.get_plant_by_name(user_id, plant_name)
-        if not plant:
-            await update.message.reply_text(
-                'No encontré esa planta.',
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return ConversationHandler.END
-        
-        context.user_data['photo_plant_id'] = plant[0]
-        context.user_data['photo_plant_name'] = plant_name
-        
-        await update.message.reply_text(
-            f'📸 Perfecto! Ahora envía una foto de "{plant_name}"',
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
-    
-    async def receive_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if 'photo_plant_id' not in context.user_data:
-            await update.message.reply_text(
-                '📸 Para agregar una foto, usa primero /foto'
-            )
-            return
-        
-        plant_id = context.user_data['photo_plant_id']
-        plant_name = context.user_data['photo_plant_name']
-        
-        photo = update.message.photo[-1]
-        file_id = photo.file_id
-        caption = update.message.caption
-        
-        self.db.add_plant_photo(plant_id, file_id, caption)
-        
-        await update.message.reply_text(
-            f'✅ ¡Foto agregada a "{plant_name}"!\n'
-            'Usa /fotos para ver todas las fotos.'
-        )
-        
-        context.user_data.clear()
-    
-    async def view_photos(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        plants = self.db.get_user_plants(user_id)
-        
-        if not plants:
-            await update.message.reply_text('🌵 No tienes plantas registradas.')
-            return
-        
-        keyboard = []
-        for plant in plants:
-            plant_id, name, _, _ = plant
-            photos = self.db.get_plant_photos(plant_id)
-            if photos:
-                keyboard.append([InlineKeyboardButton(f"📸 {name} ({len(photos)} fotos)", callback_data=f"photos_{plant_id}")])
-        
-        if not keyboard:
-            await update.message.reply_text(
-                '📸 No tienes fotos aún.\n'
-                'Usa /foto para agregar fotos a tus plantas.'
-            )
-            return
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            '📸 *Selecciona una planta para ver sus fotos:*',
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-    
-    async def create_group_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            '📍 ¿Cómo quieres llamar al grupo/ubicación?\n'
-            'Ejemplos: Sala, Balcón, Jardín, Oficina\n\n'
-            '(Usa /cancelar para cancelar)'
-        )
-        return GROUP_NAME
-    
-    async def create_group_name(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        group_name = update.message.text
-        user_id = update.effective_user.id
-        
-        self.db.create_group(user_id, group_name)
-        
-        await update.message.reply_text(
-            f'✅ Grupo "{group_name}" creado!\n'
-            'Usa /grupos para ver todos tus grupos.'
-        )
-        
-        context.user_data.clear()
-        return ConversationHandler.END
-    
-    async def list_groups(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        groups = self.db.get_user_groups(user_id)
-        
-        if not groups:
-            await update.message.reply_text(
-                '📍 No tienes grupos creados.\n'
-                'Usa /crear_grupo para crear uno.'
-            )
-            return
-        
-        message = '📍 *Tus grupos:*\n\n'
-        for group in groups:
-            group_id, name, plant_count = group
-            message += f'📦 *{name}* - {plant_count} planta(s)\n'
-        
-        await update.message.reply_text(message, parse_mode='Markdown')
-    
-    async def show_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        stats = self.db.get_watering_stats(user_id)
-        
-        message = '📊 *Tus estadísticas:*\n\n'
-        message += f'🌱 Total de plantas: *{stats["total_plants"]}*\n'
-        message += f'💧 Total de riegos: *{stats["total_waterings"]}*\n'
-        message += f'📅 Días activo: *{stats["days_active"]}*\n'
-        
-        if stats['most_watered'] and stats['most_watered'][0]:
-            message += f'🏆 Planta más regada: *{stats["most_watered"][0]}* ({stats["most_watered"][1]} riegos)\n'
-        
-        if stats['total_plants'] > 0:
-            avg = stats['total_waterings'] / stats['total_plants']
-            message += f'📈 Promedio de riegos por planta: *{avg:.1f}*\n'
-        
-        await update.message.reply_text(message, parse_mode='Markdown')
-    
-    async def toggle_notifications(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        settings = self.db.get_user_settings(user_id)
-        
-        if settings:
-            enabled, time = settings
-            new_state = not enabled
-        else:
-            new_state = True
-            time = '09:00'
-        
-        self.db.update_notification_settings(user_id, new_state, time)
-        
-        if new_state:
-            await update.message.reply_text(
-                f'🔔 Notificaciones activadas!\n'
-                f'Recibirás recordatorios a las {time} cuando tus plantas necesiten riego.'
-            )
-        else:
-            await update.message.reply_text(
-                '🔕 Notificaciones desactivadas.'
-            )
-    
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        
-        if query.data.startswith('photos_'):
-            plant_id = int(query.data.split('_')[1])
-            photos = self.db.get_plant_photos(plant_id)
-            
-            for photo in photos[:5]:
-                _, file_id, caption, uploaded_at = photo
-                date = datetime.fromisoformat(uploaded_at).strftime('%d/%m/%Y')
-                caption_text = f"📅 {date}\n{caption}" if caption else f"📅 {date}"
-                
-                await query.message.reply_photo(
-                    photo=file_id,
-                    caption=caption_text
-                )
-    
     async def delete_plant(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         plants = self.db.get_user_plants(user_id)
@@ -538,57 +301,8 @@ class PlantBot:
         context.user_data.clear()
         return ConversationHandler.END
     
-    async def send_notifications(self):
-        while True:
-            try:
-                await asyncio.sleep(3600)
-                
-                users = self.db.get_all_users_for_notifications()
-                
-                for user_id in users:
-                    plants = self.db.get_user_plants(user_id)
-                    pending = []
-                    
-                    for plant in plants:
-                        plant_id, name, days, last_watered = plant
-                        
-                        if not last_watered:
-                            pending.append(name)
-                        else:
-                            last_date = datetime.fromisoformat(last_watered)
-                            next_water = last_date + timedelta(days=days)
-                            days_until = (next_water - datetime.now()).days
-                            
-                            if days_until <= 0:
-                                pending.append(name)
-                    
-                    if pending:
-                        message = '🔔 *Recordatorio de riego:*\n\n'
-                        message += 'Las siguientes plantas necesitan riego:\n'
-                        for name in pending:
-                            message += f'💧 {name}\n'
-                        message += '\nUsa /regar para registrar el riego.'
-                        
-                        try:
-                            await self.application.bot.send_message(
-                                chat_id=user_id,
-                                text=message,
-                                parse_mode='Markdown'
-                            )
-                        except Exception as e:
-                            logger.error(f'Error sending notification to {user_id}: {e}')
-                
-            except Exception as e:
-                logger.error(f'Error in notification loop: {e}')
-    
     def run(self):
         logger.info('Bot iniciado...')
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        self.notification_task = loop.create_task(self.send_notifications())
-        
         self.application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 class HealthCheckHandler(BaseHTTPRequestHandler):

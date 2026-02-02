@@ -40,6 +40,43 @@ class Database:
                 ON watering_log(plant_id)
             ''')
             
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS plant_photos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    plant_id INTEGER NOT NULL,
+                    file_id TEXT NOT NULL,
+                    caption TEXT,
+                    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (plant_id) REFERENCES plants (id) ON DELETE CASCADE
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS plant_groups (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    user_id INTEGER PRIMARY KEY,
+                    notifications_enabled INTEGER DEFAULT 1,
+                    notification_time TEXT DEFAULT '09:00',
+                    timezone TEXT DEFAULT 'UTC'
+                )
+            ''')
+            
+            cursor.execute('''
+                ALTER TABLE plants ADD COLUMN group_id INTEGER
+            ''', ())
+            
+            cursor.execute('''
+                ALTER TABLE plants ADD COLUMN photo_file_id TEXT
+            ''', ())
+            
             conn.commit()
     
     def add_plant(self, user_id: int, name: str, watering_frequency_days: int) -> int:
@@ -124,3 +161,140 @@ class Database:
                 WHERE p.user_id = ?
             ''', (user_id,))
             return cursor.fetchall()
+    
+    def add_plant_photo(self, plant_id: int, file_id: str, caption: str = None) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'INSERT INTO plant_photos (plant_id, file_id, caption) VALUES (?, ?, ?)',
+                (plant_id, file_id, caption)
+            )
+            cursor.execute(
+                'UPDATE plants SET photo_file_id = ? WHERE id = ?',
+                (file_id, plant_id)
+            )
+            conn.commit()
+            return cursor.lastrowid
+    
+    def get_plant_photos(self, plant_id: int) -> List[Tuple]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, file_id, caption, uploaded_at
+                FROM plant_photos
+                WHERE plant_id = ?
+                ORDER BY uploaded_at DESC
+            ''', (plant_id,))
+            return cursor.fetchall()
+    
+    def create_group(self, user_id: int, name: str) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'INSERT INTO plant_groups (user_id, name) VALUES (?, ?)',
+                (user_id, name)
+            )
+            conn.commit()
+            return cursor.lastrowid
+    
+    def get_user_groups(self, user_id: int) -> List[Tuple]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, name, 
+                    (SELECT COUNT(*) FROM plants WHERE group_id = plant_groups.id) as plant_count
+                FROM plant_groups
+                WHERE user_id = ?
+                ORDER BY name
+            ''', (user_id,))
+            return cursor.fetchall()
+    
+    def assign_plant_to_group(self, plant_id: int, group_id: int):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE plants SET group_id = ? WHERE id = ?',
+                (group_id, plant_id)
+            )
+            conn.commit()
+    
+    def get_plants_by_group(self, group_id: int) -> List[Tuple]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, name, watering_frequency_days
+                FROM plants
+                WHERE group_id = ?
+                ORDER BY name
+            ''', (group_id,))
+            return cursor.fetchall()
+    
+    def get_user_settings(self, user_id: int) -> Optional[Tuple]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT notifications_enabled, notification_time FROM user_settings WHERE user_id = ?',
+                (user_id,)
+            )
+            return cursor.fetchone()
+    
+    def update_notification_settings(self, user_id: int, enabled: bool, time: str = None):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'INSERT OR REPLACE INTO user_settings (user_id, notifications_enabled, notification_time) VALUES (?, ?, ?)',
+                (user_id, 1 if enabled else 0, time or '09:00')
+            )
+            conn.commit()
+    
+    def get_all_users_for_notifications(self) -> List[int]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT DISTINCT user_id 
+                FROM user_settings 
+                WHERE notifications_enabled = 1
+            ''')
+            return [row[0] for row in cursor.fetchall()]
+    
+    def get_watering_stats(self, user_id: int) -> dict:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                'SELECT COUNT(*) FROM watering_log w JOIN plants p ON w.plant_id = p.id WHERE p.user_id = ?',
+                (user_id,)
+            )
+            total_waterings = cursor.fetchone()[0]
+            
+            cursor.execute(
+                'SELECT COUNT(*) FROM plants WHERE user_id = ?',
+                (user_id,)
+            )
+            total_plants = cursor.fetchone()[0]
+            
+            cursor.execute('''
+                SELECT p.name, COUNT(w.id) as count
+                FROM plants p
+                LEFT JOIN watering_log w ON p.id = w.plant_id
+                WHERE p.user_id = ?
+                GROUP BY p.id
+                ORDER BY count DESC
+                LIMIT 1
+            ''', (user_id,))
+            most_watered = cursor.fetchone()
+            
+            cursor.execute('''
+                SELECT COUNT(DISTINCT DATE(watered_at))
+                FROM watering_log w
+                JOIN plants p ON w.plant_id = p.id
+                WHERE p.user_id = ?
+            ''', (user_id,))
+            days_active = cursor.fetchone()[0]
+            
+            return {
+                'total_waterings': total_waterings,
+                'total_plants': total_plants,
+                'most_watered': most_watered,
+                'days_active': days_active
+            }
