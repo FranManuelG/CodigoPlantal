@@ -142,7 +142,12 @@ class PlantBot:
             plant_name = context.user_data['plant_name']
             user_id = update.effective_user.id
             
-            self.db.add_plant(user_id, plant_name, days)
+            logger.info(f'Agregando planta: user_id={user_id}, name={plant_name}, days={days}')
+            plant_id = self.db.add_plant(user_id, plant_name, days)
+            logger.info(f'Planta agregada con ID: {plant_id}')
+            
+            plants = self.db.get_user_plants(user_id)
+            logger.info(f'Usuario {user_id} ahora tiene {len(plants)} plantas')
             
             await update.message.reply_text(
                 f'✅ ¡Planta "{plant_name}" agregada!\n'
@@ -162,7 +167,9 @@ class PlantBot:
     
     async def list_plants(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
+        logger.info(f'Listando plantas para user_id={user_id}')
         plants = self.db.get_user_plants(user_id)
+        logger.info(f'Encontradas {len(plants)} plantas para user_id={user_id}')
         
         if not plants:
             await update.message.reply_text(
