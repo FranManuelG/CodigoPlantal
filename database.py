@@ -69,13 +69,15 @@ class Database:
                 )
             ''')
             
-            cursor.execute('''
-                ALTER TABLE plants ADD COLUMN group_id INTEGER
-            ''', ())
+            try:
+                cursor.execute('ALTER TABLE plants ADD COLUMN group_id INTEGER')
+            except sqlite3.OperationalError:
+                pass
             
-            cursor.execute('''
-                ALTER TABLE plants ADD COLUMN photo_file_id TEXT
-            ''', ())
+            try:
+                cursor.execute('ALTER TABLE plants ADD COLUMN photo_file_id TEXT')
+            except sqlite3.OperationalError:
+                pass
             
             conn.commit()
     
