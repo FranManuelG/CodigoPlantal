@@ -2,6 +2,8 @@ import os
 import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application,
@@ -301,7 +303,23 @@ class PlantBot:
     
     def run(self):
         logger.info('Bot iniciado...')
-        self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+        self.application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Bot is running')
+    
+    def log_message(self, format, *args):
+        pass
+
+def run_health_server():
+    port = int(os.getenv('PORT', 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    logger.info(f'Health check server running on port {port}')
+    server.serve_forever()
 
 def main():
     load_dotenv()
@@ -311,6 +329,9 @@ def main():
         print('Error: No se encontró TELEGRAM_BOT_TOKEN en las variables de entorno.')
         print('Crea un archivo .env con tu token de bot de Telegram.')
         return
+    
+    health_thread = Thread(target=run_health_server, daemon=True)
+    health_thread.start()
     
     bot = PlantBot(token)
     bot.run()

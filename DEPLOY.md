@@ -23,8 +23,8 @@ git push -u origin main
 1. Ve a [dashboard.render.com](https://dashboard.render.com)
 2. Regístrate con tu cuenta de GitHub
 
-### 3. Crear nuevo Web Service
-1. Click en **"New +"** → **"Web Service"**
+### 3. Crear nuevo Background Worker
+1. Click en **"New +"** → **"Background Worker"**
 2. Conecta tu repositorio de GitHub
 3. Selecciona el repositorio `telegram-plant-bot`
 
