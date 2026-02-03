@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from threading import Thread
@@ -596,7 +597,19 @@ class PlantBot:
         
         self.notification_task = loop.create_task(self.send_notifications())
         
-        self.application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+        while True:
+            try:
+                logger.info('Iniciando polling...')
+                self.application.run_polling(
+                    allowed_updates=Update.ALL_TYPES, 
+                    drop_pending_updates=True,
+                    close_loop=False
+                )
+            except Exception as e:
+                logger.error(f'Error en polling: {e}')
+                logger.info('Reintentando en 10 segundos...')
+                import time
+                time.sleep(10)
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -623,11 +636,19 @@ def main():
         print('Crea un archivo .env con tu token de bot de Telegram.')
         return
     
+    logger.info(f'Iniciando bot con PID: {os.getpid()}')
+    
     health_thread = Thread(target=run_health_server, daemon=True)
     health_thread.start()
     
-    bot = PlantBot(token)
-    bot.run()
+    try:
+        bot = PlantBot(token)
+        bot.run()
+    except KeyboardInterrupt:
+        logger.info('Bot detenido por usuario')
+    except Exception as e:
+        logger.error(f'Error fatal: {e}')
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
