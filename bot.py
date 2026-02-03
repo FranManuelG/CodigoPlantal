@@ -614,9 +614,18 @@ class PlantBot:
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
+        self.send_header('Content-type', 'application/json')
         self.end_headers()
-        self.wfile.write(b'Bot is running')
+        
+        import json
+        response = {
+            'status': 'ok',
+            'bot': 'running',
+            'timestamp': datetime.now().isoformat(),
+            'pid': os.getpid()
+        }
+        self.wfile.write(json.dumps(response).encode())
+        logger.info(f'Health check recibido desde {self.client_address[0]}')
     
     def log_message(self, format, *args):
         pass
