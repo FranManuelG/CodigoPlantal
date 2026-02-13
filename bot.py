@@ -207,7 +207,11 @@ class PlantBot:
                 plant_id, name, days, last_watered = plant
                 
                 if last_watered:
-                    last_date = datetime.fromisoformat(last_watered)
+                    if isinstance(last_watered, str):
+                        last_date = datetime.fromisoformat(last_watered)
+                    else:
+                        last_date = last_watered
+                    
                     days_ago = (datetime.now() - last_date).days
                     next_water = last_date + timedelta(days=days)
                     days_until = (next_water - datetime.now()).days
@@ -295,7 +299,10 @@ class PlantBot:
         message = '📊 *Historial de riegos:*\n\n'
         for record in history:
             plant_name, watered_at = record
-            date = datetime.fromisoformat(watered_at)
+            if isinstance(watered_at, str):
+                date = datetime.fromisoformat(watered_at)
+            else:
+                date = watered_at
             formatted_date = date.strftime('%d/%m/%Y %H:%M')
             message += f'💧 {plant_name} - {formatted_date}\n'
         
@@ -316,7 +323,10 @@ class PlantBot:
             if not last_watered:
                 pending.append((name, -1))
             else:
-                last_date = datetime.fromisoformat(last_watered)
+                if isinstance(last_watered, str):
+                    last_date = datetime.fromisoformat(last_watered)
+                else:
+                    last_date = last_watered
                 next_water = last_date + timedelta(days=days)
                 days_until = (next_water - datetime.now()).days
                 
@@ -532,7 +542,10 @@ class PlantBot:
             
             for photo in photos[:5]:
                 _, file_id, caption, uploaded_at = photo
-                date = datetime.fromisoformat(uploaded_at).strftime('%d/%m/%Y')
+                if isinstance(uploaded_at, str):
+                    date = datetime.fromisoformat(uploaded_at).strftime('%d/%m/%Y')
+                else:
+                    date = uploaded_at.strftime('%d/%m/%Y')
                 caption_text = f"📅 {date}\n{caption}" if caption else f"📅 {date}"
                 
                 await query.message.reply_photo(
@@ -593,7 +606,10 @@ class PlantBot:
                         if not last_watered:
                             pending.append(name)
                         else:
-                            last_date = datetime.fromisoformat(last_watered)
+                            if isinstance(last_watered, str):
+                                last_date = datetime.fromisoformat(last_watered)
+                            else:
+                                last_date = last_watered
                             next_water = last_date + timedelta(days=days)
                             days_until = (next_water - datetime.now()).days
                             
