@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 PLANT_NAME, PLANT_DAYS, SELECTING_PLANT, PHOTO_PLANT, GROUP_NAME, GROUP_ASSIGN = range(6)
 
+menu_buttons = ['🌱 Agregar Planta', '💧 Regar', '📋 Mis Plantas', '⏰ Pendientes', '📊 Estadísticas', '📸 Fotos', '❓ Ayuda']
+menu_filter = ~filters.Regex('^(' + '|'.join([btn.replace('(', r'\(').replace(')', r'\)').replace('?', r'\?') for btn in menu_buttons]) + ')$')
+
 class PlantBot:
     def __init__(self, token: str):
         self.token = token
@@ -50,8 +53,8 @@ class PlantBot:
                 MessageHandler(filters.Regex('^🌱 Agregar Planta$'), self.add_plant_start)
             ],
             states={
-                PLANT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_name)],
-                PLANT_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_days)],
+                PLANT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.add_plant_name)],
+                PLANT_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.add_plant_days)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
@@ -62,7 +65,7 @@ class PlantBot:
                 MessageHandler(filters.Regex('^💧 Regar$'), self.water_plant_start)
             ],
             states={
-                SELECTING_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.water_plant_select)],
+                SELECTING_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.water_plant_select)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
@@ -70,7 +73,7 @@ class PlantBot:
         photo_handler = ConversationHandler(
             entry_points=[CommandHandler('foto', self.add_photo_start)],
             states={
-                PHOTO_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_photo_select_plant)],
+                PHOTO_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.add_photo_select_plant)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
@@ -78,7 +81,7 @@ class PlantBot:
         group_handler = ConversationHandler(
             entry_points=[CommandHandler('crear_grupo', self.create_group_start)],
             states={
-                GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.create_group_name)],
+                GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.create_group_name)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
