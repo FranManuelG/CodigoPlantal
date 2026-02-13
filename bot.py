@@ -45,7 +45,10 @@ class PlantBot:
     
     def _setup_handlers(self):
         add_plant_handler = ConversationHandler(
-            entry_points=[CommandHandler('agregar', self.add_plant_start)],
+            entry_points=[
+                CommandHandler('agregar', self.add_plant_start),
+                MessageHandler(filters.Regex('^🌱 Agregar Planta$'), self.add_plant_start)
+            ],
             states={
                 PLANT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_name)],
                 PLANT_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_days)],
@@ -54,7 +57,10 @@ class PlantBot:
         )
         
         regar_handler = ConversationHandler(
-            entry_points=[CommandHandler('regar', self.water_plant_start)],
+            entry_points=[
+                CommandHandler('regar', self.water_plant_start),
+                MessageHandler(filters.Regex('^💧 Regar$'), self.water_plant_start)
+            ],
             states={
                 SELECTING_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.water_plant_select)],
             },
@@ -94,7 +100,11 @@ class PlantBot:
         self.application.add_handler(CommandHandler('notificaciones', self.toggle_notifications))
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
         self.application.add_handler(MessageHandler(filters.PHOTO, self.receive_photo))
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_menu_button))
+        self.application.add_handler(MessageHandler(filters.Regex('^📋 Mis Plantas$'), self.list_plants))
+        self.application.add_handler(MessageHandler(filters.Regex('^⏰ Pendientes$'), self.pending_plants))
+        self.application.add_handler(MessageHandler(filters.Regex('^📊 Estadísticas$'), self.show_stats))
+        self.application.add_handler(MessageHandler(filters.Regex('^📸 Fotos$'), self.view_photos))
+        self.application.add_handler(MessageHandler(filters.Regex('^❓ Ayuda$'), self.help_command))
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -251,7 +261,7 @@ class PlantBot:
         if update.message.text == 'Cancelar':
             await update.message.reply_text(
                 'Operación cancelada.',
-                reply_markup=ReplyKeyboardRemove()
+                reply_markup=self.get_main_menu()
             )
             return ConversationHandler.END
         
@@ -560,25 +570,6 @@ class PlantBot:
         self.db.delete_plant(plant[0])
         await update.message.reply_text(f'✅ Planta "{plant_name}" eliminada.')
     
-    async def handle_menu_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        text = update.message.text
-        
-        if text == '🌱 Agregar Planta':
-            await self.add_plant_start(update, context)
-        elif text == '💧 Regar':
-            await self.water_plant_start(update, context)
-        elif text == '📋 Mis Plantas':
-            await self.list_plants(update, context)
-        elif text == '⏰ Pendientes':
-            await self.pending_plants(update, context)
-        elif text == '📊 Estadísticas':
-            await self.show_stats(update, context)
-        elif text == '📸 Fotos':
-            await self.view_photos(update, context)
-        elif text == '❓ Ayuda':
-            await self.help_command(update, context)
-        else:
-            return
     
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
