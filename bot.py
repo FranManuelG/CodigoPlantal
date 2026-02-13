@@ -189,45 +189,52 @@ class PlantBot:
             return PLANT_DAYS
     
     async def list_plants(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.effective_user.id
-        logger.info(f'Listando plantas para user_id={user_id}')
-        plants = self.db.get_user_plants(user_id)
-        logger.info(f'Encontradas {len(plants)} plantas para user_id={user_id}')
-        
-        if not plants:
-            await update.message.reply_text(
-                '🌵 No tienes plantas registradas aún.\n'
-                'Usa /agregar para agregar tu primera planta.'
-            )
-            return
-        
-        message = '🌿 *Tus plantas:*\n\n'
-        for plant in plants:
-            plant_id, name, days, last_watered = plant
+        try:
+            user_id = update.effective_user.id
+            logger.info(f'Listando plantas para user_id={user_id}')
+            plants = self.db.get_user_plants(user_id)
+            logger.info(f'Encontradas {len(plants)} plantas para user_id={user_id}')
             
-            if last_watered:
-                last_date = datetime.fromisoformat(last_watered)
-                days_ago = (datetime.now() - last_date).days
-                next_water = last_date + timedelta(days=days)
-                days_until = (next_water - datetime.now()).days
+            if not plants:
+                await update.message.reply_text(
+                    '🌵 No tienes plantas registradas aún.\n'
+                    'Usa /agregar para agregar tu primera planta.'
+                )
+                return
+            
+            message = '🌿 *Tus plantas:*\n\n'
+            for plant in plants:
+                plant_id, name, days, last_watered = plant
                 
-                if days_until < 0:
-                    status = f'⚠️ Necesita riego (hace {abs(days_until)} días)'
-                elif days_until == 0:
-                    status = '💧 Necesita riego hoy'
+                if last_watered:
+                    last_date = datetime.fromisoformat(last_watered)
+                    days_ago = (datetime.now() - last_date).days
+                    next_water = last_date + timedelta(days=days)
+                    days_until = (next_water - datetime.now()).days
+                    
+                    if days_until < 0:
+                        status = f'⚠️ Necesita riego (hace {abs(days_until)} días)'
+                    elif days_until == 0:
+                        status = '💧 Necesita riego hoy'
+                    else:
+                        status = f'✅ Próximo riego en {days_until} día(s)'
+                    
+                    message += f'🌱 *{name}*\n'
+                    message += f'   Frecuencia: cada {days} día(s)\n'
+                    message += f'   Último riego: hace {days_ago} día(s)\n'
+                    message += f'   {status}\n\n'
                 else:
-                    status = f'✅ Próximo riego en {days_until} día(s)'
-                
-                message += f'🌱 *{name}*\n'
-                message += f'   Frecuencia: cada {days} día(s)\n'
-                message += f'   Último riego: hace {days_ago} día(s)\n'
-                message += f'   {status}\n\n'
-            else:
-                message += f'🌱 *{name}*\n'
-                message += f'   Frecuencia: cada {days} día(s)\n'
-                message += f'   ⚠️ Nunca regada - ¡Riégala pronto!\n\n'
-        
-        await update.message.reply_text(message, parse_mode='Markdown')
+                    message += f'🌱 *{name}*\n'
+                    message += f'   Frecuencia: cada {days} día(s)\n'
+                    message += f'   ⚠️ Nunca regada - ¡Riégala pronto!\n\n'
+            
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f'Error en list_plants: {e}', exc_info=True)
+            await update.message.reply_text(
+                f'❌ Error al listar plantas: {str(e)}\n'
+                'Por favor, contacta al administrador.'
+            )
     
     async def water_plant_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
