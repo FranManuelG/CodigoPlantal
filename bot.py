@@ -24,7 +24,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PLANT_NAME, PLANT_DAYS, SELECTING_PLANT, PHOTO_PLANT, GROUP_NAME, GROUP_ASSIGN = range(6)
+PLANT_NAME, PLANT_DAYS, PLANT_TYPE, SELECTING_PLANT, PHOTO_PLANT, GROUP_NAME, GROUP_ASSIGN = range(7)
 
 class PlantBot:
     def __init__(self, token: str):
@@ -61,6 +61,7 @@ class PlantBot:
             states={
                 PLANT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_name)],
                 PLANT_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_days)],
+                PLANT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_type)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
@@ -162,24 +163,24 @@ class PlantBot:
                 await update.message.reply_text('Por favor, ingresa un número mayor a 0.')
                 return PLANT_DAYS
             
-            plant_name = context.user_data['plant_name']
-            user_id = update.effective_user.id
+            context.user_data['watering_days'] = days
             
-            logger.info(f'Agregando planta: user_id={user_id}, name={plant_name}, days={days}')
-            plant_id = self.db.add_plant(user_id, plant_name, days)
-            logger.info(f'Planta agregada con ID: {plant_id}')
-            
-            plants = self.db.get_user_plants(user_id)
-            logger.info(f'Usuario {user_id} ahora tiene {len(plants)} plantas')
+            keyboard = [
+                ['🌵 Suculenta/Cactus', '🌴 Tropical'],
+                ['🌿 Moderada', '⚙️ Personalizada']
+            ]
             
             await update.message.reply_text(
-                f'✅ ¡Planta "{plant_name}" agregada!\n'
-                f'Frecuencia de riego: cada {days} día(s)\n\n'
-                'Usa /foto para agregar una foto de tu planta.'
+                '🌱 ¿Qué tipo de planta es?\n\n'
+                '🌵 *Suculenta/Cactus*: Sustrato 100% seco antes de regar\n'
+                '🌴 *Tropical*: Sustrato húmedo constante\n'
+                '🌿 *Moderada*: Primeros 2-3cm secos (ej: Oxalis)\n'
+                '⚙️ *Personalizada*: Define tus propias reglas\n\n'
+                'Selecciona el tipo:',
+                reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True),
+                parse_mode='Markdown'
             )
-            
-            context.user_data.clear()
-            return ConversationHandler.END
+            return PLANT_TYPE
             
         except ValueError:
             await update.message.reply_text(
@@ -187,6 +188,46 @@ class PlantBot:
                 '¿Cada cuántos días necesita riego?'
             )
             return PLANT_DAYS
+    
+    async def add_plant_type(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        plant_type_text = update.message.text
+        
+        # Mapear texto a tipo de planta
+        type_mapping = {
+            '🌵 Suculenta/Cactus': 'suculenta',
+            '🌴 Tropical': 'tropical',
+            '🌿 Moderada': 'moderada',
+            '⚙️ Personalizada': 'personalizada'
+        }
+        
+        plant_type = type_mapping.get(plant_type_text, 'moderada')
+        
+        plant_name = context.user_data['plant_name']
+        days = context.user_data['watering_days']
+        user_id = update.effective_user.id
+        
+        logger.info(f'Agregando planta: user_id={user_id}, name={plant_name}, days={days}, type={plant_type}')
+        plant_id = self.db.add_plant(user_id, plant_name, days, plant_type)
+        logger.info(f'Planta agregada con ID: {plant_id}')
+        
+        # Descripción del tipo
+        type_descriptions = {
+            'suculenta': '🌵 Suculenta/Cactus - Sustrato 100% seco',
+            'tropical': '🌴 Tropical - Sustrato húmedo constante',
+            'moderada': '🌿 Moderada - Primeros 2-3cm secos',
+            'personalizada': '⚙️ Personalizada'
+        }
+        
+        await update.message.reply_text(
+            f'✅ ¡Planta "{plant_name}" agregada!\n'
+            f'Tipo: {type_descriptions[plant_type]}\n'
+            f'Frecuencia de riego: cada {days} día(s)\n\n'
+            'Usa /foto para agregar una foto de tu planta.',
+            reply_markup=ReplyKeyboardRemove()
+        )
+        
+        context.user_data.clear()
+        return ConversationHandler.END
     
     async def list_plants(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
@@ -202,9 +243,19 @@ class PlantBot:
                 )
                 return
             
+            # Emojis por tipo de planta
+            type_emojis = {
+                'suculenta': '🌵',
+                'tropical': '🌴',
+                'moderada': '🌿',
+                'personalizada': '⚙️'
+            }
+            
             message = '🌿 *Tus plantas:*\n\n'
             for plant in plants:
-                plant_id, name, days, last_watered = plant
+                plant_id, name, days, last_watered, plant_type = plant
+                plant_type = plant_type or 'moderada'  # Default si es None
+                emoji = type_emojis.get(plant_type, '🌿')
                 
                 if last_watered:
                     if isinstance(last_watered, str):
@@ -223,12 +274,12 @@ class PlantBot:
                     else:
                         status = f'✅ Próximo riego en {days_until} día(s)'
                     
-                    message += f'🌱 *{name}*\n'
+                    message += f'{emoji} *{name}*\n'
                     message += f'   Frecuencia: cada {days} día(s)\n'
                     message += f'   Último riego: hace {days_ago} día(s)\n'
                     message += f'   {status}\n\n'
                 else:
-                    message += f'🌱 *{name}*\n'
+                    message += f'{emoji} *{name}*\n'
                     message += f'   Frecuencia: cada {days} día(s)\n'
                     message += f'   ⚠️ Nunca regada - ¡Riégala pronto!\n\n'
             
@@ -318,7 +369,7 @@ class PlantBot:
         
         pending = []
         for plant in plants:
-            plant_id, name, days, last_watered = plant
+            plant_id, name, days, last_watered, plant_type = plant
             
             if not last_watered:
                 pending.append((name, -1))
@@ -432,7 +483,7 @@ class PlantBot:
         
         keyboard = []
         for plant in plants:
-            plant_id, name, _, _ = plant
+            plant_id, name, _, _, _ = plant
             photos = self.db.get_plant_photos(plant_id)
             if photos:
                 keyboard.append([InlineKeyboardButton(f"📸 {name} ({len(photos)} fotos)", callback_data=f"photos_{plant_id}")])
@@ -601,7 +652,7 @@ class PlantBot:
                     pending = []
                     
                     for plant in plants:
-                        plant_id, name, days, last_watered = plant
+                        plant_id, name, days, last_watered, plant_type = plant
                         
                         if not last_watered:
                             pending.append(name)

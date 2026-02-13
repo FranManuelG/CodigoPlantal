@@ -36,6 +36,9 @@ class Database:
                     user_id BIGINT NOT NULL,
                     name TEXT NOT NULL,
                     watering_frequency_days INTEGER NOT NULL,
+                    plant_type TEXT DEFAULT 'moderada',
+                    seasonal_adjustment BOOLEAN DEFAULT TRUE,
+                    custom_dryness_level INTEGER DEFAULT 50,
                     group_id INTEGER,
                     photo_file_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -96,6 +99,9 @@ class Database:
                     user_id INTEGER NOT NULL,
                     name TEXT NOT NULL,
                     watering_frequency_days INTEGER NOT NULL,
+                    plant_type TEXT DEFAULT 'moderada',
+                    seasonal_adjustment INTEGER DEFAULT 1,
+                    custom_dryness_level INTEGER DEFAULT 50,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
@@ -157,24 +163,39 @@ class Database:
                 cursor.execute('ALTER TABLE plants ADD COLUMN photo_file_id TEXT')
             except sqlite3.OperationalError:
                 pass
+            
+            try:
+                cursor.execute("ALTER TABLE plants ADD COLUMN plant_type TEXT DEFAULT 'moderada'")
+            except sqlite3.OperationalError:
+                pass
+            
+            try:
+                cursor.execute('ALTER TABLE plants ADD COLUMN seasonal_adjustment INTEGER DEFAULT 1')
+            except sqlite3.OperationalError:
+                pass
+            
+            try:
+                cursor.execute('ALTER TABLE plants ADD COLUMN custom_dryness_level INTEGER DEFAULT 50')
+            except sqlite3.OperationalError:
+                pass
         
         conn.commit()
         conn.close()
     
-    def add_plant(self, user_id: int, name: str, watering_frequency_days: int) -> int:
+    def add_plant(self, user_id: int, name: str, watering_frequency_days: int, plant_type: str = 'moderada') -> int:
         conn = self._get_connection()
         cursor = conn.cursor()
         
         if self.use_postgres:
             cursor.execute(
-                'INSERT INTO plants (user_id, name, watering_frequency_days) VALUES (%s, %s, %s) RETURNING id',
-                (user_id, name, watering_frequency_days)
+                'INSERT INTO plants (user_id, name, watering_frequency_days, plant_type) VALUES (%s, %s, %s, %s) RETURNING id',
+                (user_id, name, watering_frequency_days, plant_type)
             )
             plant_id = cursor.fetchone()[0]
         else:
             cursor.execute(
-                'INSERT INTO plants (user_id, name, watering_frequency_days) VALUES (?, ?, ?)',
-                (user_id, name, watering_frequency_days)
+                'INSERT INTO plants (user_id, name, watering_frequency_days, plant_type) VALUES (?, ?, ?, ?)',
+                (user_id, name, watering_frequency_days, plant_type)
             )
             plant_id = cursor.lastrowid
         
@@ -194,7 +215,8 @@ class Database:
                 p.watering_frequency_days,
                 (SELECT watered_at FROM watering_log 
                  WHERE plant_id = p.id 
-                 ORDER BY watered_at DESC LIMIT 1) as last_watered
+                 ORDER BY watered_at DESC LIMIT 1) as last_watered,
+                p.plant_type
             FROM plants p
             WHERE p.user_id = {placeholder}
             ORDER BY p.name
