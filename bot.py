@@ -26,9 +26,6 @@ logger = logging.getLogger(__name__)
 
 PLANT_NAME, PLANT_DAYS, SELECTING_PLANT, PHOTO_PLANT, GROUP_NAME, GROUP_ASSIGN = range(6)
 
-menu_buttons = ['🌱 Agregar Planta', '💧 Regar', '📋 Mis Plantas', '⏰ Pendientes', '📊 Estadísticas', '📸 Fotos', '❓ Ayuda']
-menu_filter = ~filters.Regex('^(' + '|'.join([btn.replace('(', r'\(').replace(')', r'\)').replace('?', r'\?') for btn in menu_buttons]) + ')$')
-
 class PlantBot:
     def __init__(self, token: str):
         self.token = token
@@ -37,35 +34,21 @@ class PlantBot:
         self._setup_handlers()
         self.notification_task = None
     
-    def get_main_menu(self):
-        keyboard = [
-            ['🌱 Agregar Planta', '💧 Regar'],
-            ['📋 Mis Plantas', '⏰ Pendientes'],
-            ['📊 Estadísticas', '📸 Fotos'],
-            ['❓ Ayuda']
-        ]
-        return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
     def _setup_handlers(self):
         add_plant_handler = ConversationHandler(
-            entry_points=[
-                CommandHandler('agregar', self.add_plant_start),
-                MessageHandler(filters.Regex('^🌱 Agregar Planta$'), self.add_plant_start)
-            ],
+            entry_points=[CommandHandler('agregar', self.add_plant_start)],
             states={
-                PLANT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.add_plant_name)],
-                PLANT_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.add_plant_days)],
+                PLANT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_name)],
+                PLANT_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_plant_days)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
         
         regar_handler = ConversationHandler(
-            entry_points=[
-                CommandHandler('regar', self.water_plant_start),
-                MessageHandler(filters.Regex('^💧 Regar$'), self.water_plant_start)
-            ],
+            entry_points=[CommandHandler('regar', self.water_plant_start)],
             states={
-                SELECTING_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.water_plant_select)],
+                SELECTING_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.water_plant_select)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
@@ -73,7 +56,7 @@ class PlantBot:
         photo_handler = ConversationHandler(
             entry_points=[CommandHandler('foto', self.add_photo_start)],
             states={
-                PHOTO_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.add_photo_select_plant)],
+                PHOTO_PLANT: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.add_photo_select_plant)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
@@ -81,14 +64,17 @@ class PlantBot:
         group_handler = ConversationHandler(
             entry_points=[CommandHandler('crear_grupo', self.create_group_start)],
             states={
-                GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND & menu_filter, self.create_group_name)],
+                GROUP_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.create_group_name)],
             },
             fallbacks=[CommandHandler('cancelar', self.cancel)],
         )
         
         self.application.add_handler(CommandHandler('start', self.start))
-        self.application.add_handler(CommandHandler('menu', self.show_menu))
         self.application.add_handler(CommandHandler('ayuda', self.help_command))
+        self.application.add_handler(add_plant_handler)
+        self.application.add_handler(regar_handler)
+        self.application.add_handler(photo_handler)
+        self.application.add_handler(group_handler)
         self.application.add_handler(CommandHandler('plantas', self.list_plants))
         self.application.add_handler(CommandHandler('historial', self.watering_history))
         self.application.add_handler(CommandHandler('eliminar', self.delete_plant))
@@ -97,31 +83,15 @@ class PlantBot:
         self.application.add_handler(CommandHandler('grupos', self.list_groups))
         self.application.add_handler(CommandHandler('estadisticas', self.show_stats))
         self.application.add_handler(CommandHandler('notificaciones', self.toggle_notifications))
-        self.application.add_handler(MessageHandler(filters.Regex('^📋 Mis Plantas$'), self.list_plants))
-        self.application.add_handler(MessageHandler(filters.Regex('^⏰ Pendientes$'), self.pending_plants))
-        self.application.add_handler(MessageHandler(filters.Regex('^📊 Estadísticas$'), self.show_stats))
-        self.application.add_handler(MessageHandler(filters.Regex('^📸 Fotos$'), self.view_photos))
-        self.application.add_handler(MessageHandler(filters.Regex('^❓ Ayuda$'), self.help_command))
-        self.application.add_handler(add_plant_handler)
-        self.application.add_handler(regar_handler)
-        self.application.add_handler(photo_handler)
-        self.application.add_handler(group_handler)
-        self.application.add_handler(CallbackQueryHandler(self.button_callback))
         self.application.add_handler(MessageHandler(filters.PHOTO, self.receive_photo))
+        self.application.add_handler(CallbackQueryHandler(self.button_callback))
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         await update.message.reply_text(
             f'¡Hola {user.first_name}! 🌱\n\n'
             'Soy tu asistente para el cuidado de plantas.\n'
-            'Usa los botones del menú o /ayuda para ver todos los comandos.',
-            reply_markup=self.get_main_menu()
-        )
-    
-    async def show_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            '🌿 Menú principal:',
-            reply_markup=self.get_main_menu()
+            'Usa /ayuda para ver todos los comandos disponibles.'
         )
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -147,7 +117,7 @@ class PlantBot:
             '/ayuda \\- Mostrar este mensaje\n'
             '/cancelar \\- Cancelar operación actual'
         )
-        await update.message.reply_text(help_text, parse_mode='MarkdownV2', reply_markup=self.get_main_menu())
+        await update.message.reply_text(help_text, parse_mode='MarkdownV2')
     
     async def add_plant_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
@@ -185,8 +155,7 @@ class PlantBot:
             await update.message.reply_text(
                 f'✅ ¡Planta "{plant_name}" agregada!\n'
                 f'Frecuencia de riego: cada {days} día(s)\n\n'
-                'Usa /foto para agregar una foto de tu planta.',
-                reply_markup=self.get_main_menu()
+                'Usa /foto para agregar una foto de tu planta.'
             )
             
             context.user_data.clear()
@@ -264,7 +233,7 @@ class PlantBot:
         if update.message.text == 'Cancelar':
             await update.message.reply_text(
                 'Operación cancelada.',
-                reply_markup=self.get_main_menu()
+                reply_markup=ReplyKeyboardRemove()
             )
             return ConversationHandler.END
         
@@ -275,7 +244,7 @@ class PlantBot:
         if not plant:
             await update.message.reply_text(
                 'No encontré esa planta. Intenta de nuevo.',
-                reply_markup=self.get_main_menu()
+                reply_markup=ReplyKeyboardRemove()
             )
             return ConversationHandler.END
         
@@ -284,7 +253,7 @@ class PlantBot:
         await update.message.reply_text(
             f'✅ ¡Riego registrado para "{plant_name}"!\n'
             f'Próximo riego recomendado: en {plant[2]} día(s)',
-            reply_markup=self.get_main_menu()
+            reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
     
@@ -369,7 +338,7 @@ class PlantBot:
         if update.message.text == 'Cancelar':
             await update.message.reply_text(
                 'Operación cancelada.',
-                reply_markup=self.get_main_menu()
+                reply_markup=ReplyKeyboardRemove()
             )
             return ConversationHandler.END
         
@@ -380,7 +349,7 @@ class PlantBot:
         if not plant:
             await update.message.reply_text(
                 'No encontré esa planta.',
-                reply_markup=self.get_main_menu()
+                reply_markup=ReplyKeyboardRemove()
             )
             return ConversationHandler.END
         
@@ -411,8 +380,7 @@ class PlantBot:
         
         await update.message.reply_text(
             f'✅ ¡Foto agregada a "{plant_name}"!\n'
-            'Usa /fotos para ver todas las fotos.',
-            reply_markup=self.get_main_menu()
+            'Usa /fotos para ver todas las fotos.'
         )
         
         context.user_data.clear()
@@ -462,8 +430,7 @@ class PlantBot:
         
         await update.message.reply_text(
             f'✅ Grupo "{group_name}" creado!\n'
-            'Usa /grupos para ver todos tus grupos.',
-            reply_markup=self.get_main_menu()
+            'Usa /grupos para ver todos tus grupos.'
         )
         
         context.user_data.clear()
@@ -577,7 +544,7 @@ class PlantBot:
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             'Operación cancelada.',
-            reply_markup=self.get_main_menu()
+            reply_markup=ReplyKeyboardRemove()
         )
         context.user_data.clear()
         return ConversationHandler.END
