@@ -111,6 +111,9 @@ class PlantBot:
         user = update.effective_user
         logger.info(f'Comando /start recibido de user_id={user.id}, username={user.username}, name={user.first_name}')
         
+        # Registrar timestamp del último mensaje
+        HealthCheckHandler.last_message_time = datetime.now()
+        
         try:
             # Test de conexión a base de datos
             logger.info('Probando conexión a base de datos...')
@@ -745,20 +748,33 @@ class PlantBot:
             raise
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
+    bot_instance = None
+    last_message_time = None
+    
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.end_headers()
         
         import json
+        
+        # Información detallada del estado
+        uptime_seconds = (datetime.now() - HealthCheckHandler.start_time).total_seconds() if hasattr(HealthCheckHandler, 'start_time') else 0
+        
         response = {
             'status': 'ok',
             'bot': 'running',
             'timestamp': datetime.now().isoformat(),
-            'pid': os.getpid()
+            'pid': os.getpid(),
+            'uptime_seconds': int(uptime_seconds),
+            'uptime_minutes': round(uptime_seconds / 60, 1),
+            'last_message': HealthCheckHandler.last_message_time.isoformat() if HealthCheckHandler.last_message_time else 'none',
+            'database': 'connected' if HealthCheckHandler.bot_instance else 'unknown'
         }
         self.wfile.write(json.dumps(response).encode())
-        logger.info(f'Health check recibido desde {self.client_address[0]}')
+        
+        # Log más detallado
+        logger.info(f'✓ Health check desde {self.client_address[0]} - Uptime: {round(uptime_seconds/60, 1)}min')
     
     def log_message(self, format, *args):
         pass
@@ -780,11 +796,15 @@ def main():
     
     logger.info(f'Iniciando bot con PID: {os.getpid()}')
     
+    # Inicializar timestamp de inicio para health check
+    HealthCheckHandler.start_time = datetime.now()
+    
     health_thread = Thread(target=run_health_server, daemon=True)
     health_thread.start()
     
     try:
         bot = PlantBot(token)
+        HealthCheckHandler.bot_instance = bot
         bot.run()
     except KeyboardInterrupt:
         logger.info('Bot detenido por usuario')
