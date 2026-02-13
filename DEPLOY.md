@@ -47,6 +47,9 @@ En la sección **Environment Variables**, agrega:
 - **Key:** `TELEGRAM_BOT_TOKEN`
 - **Value:** `8597101676:AAGOa2tI5frprwUX3iINiSTGuoL4AMwBXKI`
 
+- **Key:** `DATABASE_URL`
+- **Value:** Tu URL de Supabase PostgreSQL (ver MIGRACION_SUPABASE.md)
+
 ### 6. Deploy
 1. Click en **"Create Web Service"**
 2. Render comenzará a construir y desplegar tu bot
@@ -105,8 +108,9 @@ Render automáticamente detectará los cambios y redesplegará el bot.
 - Asegúrate de que el servicio esté en estado "Live"
 
 **Error de base de datos:**
-- La base de datos SQLite se reinicia con cada deploy
-- Para persistencia, considera usar PostgreSQL (Render ofrece plan gratuito)
+- Si usas SQLite local, la base de datos se reinicia con cada deploy
+- **Recomendado:** Usa Supabase PostgreSQL para persistencia permanente (ver MIGRACION_SUPABASE.md)
+- Supabase es gratuito y no expira (a diferencia de Render PostgreSQL que expira a los 90 días)
 
 **El servicio se duerme:**
 - Esto NO debería pasar con polling activo
