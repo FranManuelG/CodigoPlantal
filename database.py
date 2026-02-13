@@ -251,6 +251,21 @@ class Database:
         conn.close()
         return result
     
+    def update_plant_frequency(self, plant_id: int, new_frequency: int):
+        """Actualiza la frecuencia de riego de una planta basándose en el comportamiento real"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        placeholder = '%s' if self.use_postgres else '?'
+        cursor.execute(
+            f'UPDATE plants SET watering_frequency_days = {placeholder} WHERE id = {placeholder}',
+            (new_frequency, plant_id)
+        )
+        
+        conn.commit()
+        conn.close()
+        logger.info(f'Frecuencia actualizada para plant_id={plant_id} a {new_frequency} días')
+    
     def record_watering(self, plant_id: int) -> int:
         conn = self._get_connection()
         cursor = conn.cursor()

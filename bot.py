@@ -270,11 +270,20 @@ class PlantBot:
                 'personalizada': '⚙️'
             }
             
+            # Consejos de cuidado por tipo
+            care_tips = {
+                'suculenta': '💡 Sustrato 100% seco antes de regar',
+                'tropical': '💡 Mantén sustrato húmedo constante',
+                'moderada': '💡 Primeros 2-3cm del sustrato secos',
+                'personalizada': '💡 Sigue tus propias reglas'
+            }
+            
             message = '🌿 *Tus plantas:*\n\n'
             for plant in plants:
                 plant_id, name, days, last_watered, plant_type = plant
                 plant_type = plant_type or 'moderada'  # Default si es None
                 emoji = type_emojis.get(plant_type, '🌿')
+                care_tip = care_tips.get(plant_type, '')
                 
                 if last_watered:
                     if isinstance(last_watered, str):
@@ -296,11 +305,17 @@ class PlantBot:
                     message += f'{emoji} *{name}*\n'
                     message += f'   Frecuencia: cada {days} día(s)\n'
                     message += f'   Último riego: hace {days_ago} día(s)\n'
-                    message += f'   {status}\n\n'
+                    message += f'   {status}\n'
+                    if care_tip:
+                        message += f'   {care_tip}\n'
+                    message += '\n'
                 else:
                     message += f'{emoji} *{name}*\n'
                     message += f'   Frecuencia: cada {days} día(s)\n'
-                    message += f'   ⚠️ Nunca regada - ¡Riégala pronto!\n\n'
+                    message += f'   ⚠️ Nunca regada - ¡Riégala pronto!\n'
+                    if care_tip:
+                        message += f'   {care_tip}\n'
+                    message += '\n'
             
             await update.message.reply_text(message, parse_mode='Markdown')
         except Exception as e:
@@ -349,11 +364,52 @@ class PlantBot:
             )
             return ConversationHandler.END
         
-        self.db.record_watering(plant[0])
+        plant_id = plant[0]
+        current_frequency = plant[2]
+        
+        # Obtener último riego para calcular días reales
+        plants_data = self.db.get_user_plants(user_id)
+        last_watered = None
+        for p in plants_data:
+            if p[0] == plant_id:
+                last_watered = p[3]
+                break
+        
+        # Calcular días reales desde último riego
+        actual_days = None
+        frequency_adjusted = False
+        adjustment_message = ""
+        
+        if last_watered:
+            if isinstance(last_watered, str):
+                last_date = datetime.fromisoformat(last_watered)
+            else:
+                last_date = last_watered
+            
+            actual_days = (datetime.now() - last_date).days
+            
+            # Si los días reales difieren del intervalo configurado, ajustar
+            if actual_days > 0 and actual_days != current_frequency:
+                logger.info(f'Ajustando frecuencia de "{plant_name}": {current_frequency} → {actual_days} días')
+                self.db.update_plant_frequency(plant_id, actual_days)
+                frequency_adjusted = True
+                adjustment_message = f'\n📊 Frecuencia ajustada: {current_frequency} → {actual_days} día(s)'
+        
+        # Registrar el riego
+        self.db.record_watering(plant_id)
+        
+        # Mensaje de confirmación
+        message = f'✅ ¡Riego registrado para "{plant_name}"!'
+        if actual_days:
+            message += f'\n⏱️ Han pasado {actual_days} día(s) desde el último riego'
+        if frequency_adjusted:
+            message += adjustment_message
+            message += f'\n💡 Próximo riego recomendado: en {actual_days} día(s)'
+        else:
+            message += f'\n💡 Próximo riego recomendado: en {current_frequency} día(s)'
         
         await update.message.reply_text(
-            f'✅ ¡Riego registrado para "{plant_name}"!\n'
-            f'Próximo riego recomendado: en {plant[2]} día(s)',
+            message,
             reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
