@@ -1,8 +1,11 @@
 import sqlite3
 import os
+import logging
 from datetime import datetime
 from typing import List, Tuple, Optional
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 class Database:
     def __init__(self, db_path: str = 'plants.db'):
@@ -10,14 +13,21 @@ class Database:
         self.use_postgres = bool(self.database_url)
         
         if self.use_postgres:
+            logger.info(f'Usando PostgreSQL. URL: {self.database_url[:50]}...')
             import psycopg2
             from psycopg2.extras import RealDictCursor
             self.psycopg2 = psycopg2
             self.RealDictCursor = RealDictCursor
         else:
+            logger.info(f'Usando SQLite. Path: {db_path}')
             self.db_path = db_path
         
-        self._init_db()
+        try:
+            self._init_db()
+            logger.info('Base de datos inicializada correctamente')
+        except Exception as e:
+            logger.error(f'ERROR al inicializar base de datos: {e}', exc_info=True)
+            raise
     
     def _get_connection(self):
         if self.use_postgres:

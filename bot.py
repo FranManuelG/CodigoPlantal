@@ -109,11 +109,27 @@ class PlantBot:
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
-        await update.message.reply_text(
-            f'¡Hola {user.first_name}! 🌱\n\n'
-            'Soy tu asistente para el cuidado de plantas.\n'
-            'Usa /ayuda para ver todos los comandos disponibles.'
-        )
+        logger.info(f'Comando /start recibido de user_id={user.id}, username={user.username}, name={user.first_name}')
+        
+        try:
+            # Test de conexión a base de datos
+            logger.info('Probando conexión a base de datos...')
+            test_plants = self.db.get_user_plants(user.id)
+            logger.info(f'Conexión a BD exitosa. Usuario tiene {len(test_plants)} plantas')
+            
+            await update.message.reply_text(
+                f'¡Hola {user.first_name}! 🌱\n\n'
+                'Soy tu asistente para el cuidado de plantas.\n'
+                'Usa /ayuda para ver todos los comandos disponibles.'
+            )
+            logger.info(f'Respuesta enviada exitosamente a user_id={user.id}')
+            
+        except Exception as e:
+            logger.error(f'ERROR en /start para user_id={user.id}: {e}', exc_info=True)
+            await update.message.reply_text(
+                f'⚠️ Error al iniciar el bot:\n{str(e)}\n\n'
+                'Por favor, contacta al administrador.'
+            )
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_text = (
@@ -687,29 +703,46 @@ class PlantBot:
                 logger.error(f'Error in notification loop: {e}')
     
     def run(self):
-        logger.info('Bot iniciado...')
+        logger.info('='*60)
+        logger.info('Bot iniciando...')
+        logger.info(f'Python version: {sys.version}')
+        logger.info(f'PID: {os.getpid()}')
+        logger.info(f'DATABASE_URL configurado: {bool(os.getenv("DATABASE_URL"))}')
+        logger.info('='*60)
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        loop.run_until_complete(self.setup_commands())
-        logger.info('Comandos del bot configurados')
-        
-        self.notification_task = loop.create_task(self.send_notifications())
-        
-        while True:
-            try:
-                logger.info('Iniciando polling...')
-                self.application.run_polling(
-                    allowed_updates=Update.ALL_TYPES, 
-                    drop_pending_updates=True,
-                    close_loop=False
-                )
-            except Exception as e:
-                logger.error(f'Error en polling: {e}')
-                logger.info('Reintentando en 10 segundos...')
-                import time
-                time.sleep(10)
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            logger.info('Configurando comandos del bot...')
+            loop.run_until_complete(self.setup_commands())
+            logger.info('✓ Comandos del bot configurados exitosamente')
+            
+            logger.info('Iniciando tarea de notificaciones...')
+            self.notification_task = loop.create_task(self.send_notifications())
+            logger.info('✓ Tarea de notificaciones iniciada')
+            
+            logger.info('='*60)
+            logger.info('BOT LISTO Y ESPERANDO MENSAJES')
+            logger.info('='*60)
+            
+            while True:
+                try:
+                    logger.info('Iniciando polling de Telegram...')
+                    self.application.run_polling(
+                        allowed_updates=Update.ALL_TYPES, 
+                        drop_pending_updates=True,
+                        close_loop=False
+                    )
+                except Exception as e:
+                    logger.error(f'ERROR en polling: {e}', exc_info=True)
+                    logger.info('Reintentando en 10 segundos...')
+                    import time
+                    time.sleep(10)
+                    
+        except Exception as e:
+            logger.error(f'ERROR FATAL al iniciar bot: {e}', exc_info=True)
+            raise
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
