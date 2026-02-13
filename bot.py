@@ -92,9 +92,9 @@ class PlantBot:
         self.application.add_handler(CommandHandler('grupos', self.list_groups))
         self.application.add_handler(CommandHandler('estadisticas', self.show_stats))
         self.application.add_handler(CommandHandler('notificaciones', self.toggle_notifications))
+        self.application.add_handler(CallbackQueryHandler(self.button_callback))
         self.application.add_handler(MessageHandler(filters.PHOTO, self.receive_photo))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_menu_button))
-        self.application.add_handler(CallbackQueryHandler(self.button_callback))
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
