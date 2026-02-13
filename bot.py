@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import asyncio
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -33,6 +33,26 @@ class PlantBot:
         self.application = Application.builder().token(token).build()
         self._setup_handlers()
         self.notification_task = None
+    
+    async def setup_commands(self):
+        commands = [
+            BotCommand("start", "Iniciar el bot"),
+            BotCommand("ayuda", "Ver todos los comandos"),
+            BotCommand("agregar", "Agregar una nueva planta"),
+            BotCommand("plantas", "Ver todas tus plantas"),
+            BotCommand("regar", "Registrar que regaste una planta"),
+            BotCommand("pendientes", "Ver plantas que necesitan riego"),
+            BotCommand("historial", "Ver historial de riegos"),
+            BotCommand("foto", "Agregar foto a una planta"),
+            BotCommand("fotos", "Ver fotos de tus plantas"),
+            BotCommand("crear_grupo", "Crear grupo/ubicación"),
+            BotCommand("grupos", "Ver grupos y plantas"),
+            BotCommand("estadisticas", "Ver estadísticas de riego"),
+            BotCommand("notificaciones", "Activar/desactivar recordatorios"),
+            BotCommand("eliminar", "Eliminar una planta"),
+            BotCommand("cancelar", "Cancelar operación actual"),
+        ]
+        await self.application.bot.set_my_commands(commands)
     
     
     def _setup_handlers(self):
@@ -597,6 +617,9 @@ class PlantBot:
         
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
+        loop.run_until_complete(self.setup_commands())
+        logger.info('Comandos del bot configurados')
         
         self.notification_task = loop.create_task(self.send_notifications())
         
